@@ -7,6 +7,7 @@ class RoverMotor
     RoverMotor(int pwm, int dir1, int dir2, int ENCA, int ENCB, float kp,float ki);
     void setMotor(int dir, int pwmVal);
     void readEncoder();
+    void UpdatePI();
   private:
     int pwmPin;
     int dir1Pin;
@@ -74,7 +75,7 @@ void RoverMotor::readEncoder() {
   if(B>0){
     // If B is high, increment forward
     increment = 1;
-  }
+    }
   else{
     // Otherwise, increment backward
     increment = -1;
@@ -88,7 +89,47 @@ void RoverMotor::readEncoder() {
   prevT_i = currT;
 };
 
+void RoverMotor::UpdatePI(){
+  pos = pos_i;
+  velocity2 = velocity_i;
+  long currT = micros();
+  float deltaT = ((float) (currT-prevT))/1.0e6;
+  float velocity1 = (pos - posPrev)/deltaT;
+  posPrev = pos;
+  prevT = currT;
 
+  // Convert count/s to RPM
+  float v1 = velocity1/408*60.0;    //change 408 to specific encoder resolution 
+  float v2 = velocity2/408*60.0;
+
+  // Low-pass filter (25 Hz cutoff)
+  v1Filt = 0.854*v1Filt + 0.0728*v1 + 0.0728*v1Prev;
+  v1Prev = v1;
+  v2Filt = 0.854*v2Filt + 0.0728*v2 + 0.0728*v2Prev;
+  v2Prev = v2;
+
+  // Set a setpoint (in rpm) 
+  float vt = 150*(sin(currT/1e6)>0);
+
+  // Compute the control signal u
+  float kp = 3;
+  float ki = 22;
+  float e = vt-v1Filt;
+  eintegral = eintegral + e*deltaT;
+  
+  float u = kp*e + ki*eintegral;
+
+  // Set the motor speed and direction
+  int dir = 1;
+  if (u<0){
+    dir = -1;
+  }
+  int pwr = (int) fabs(u);
+  if(pwr > 255){
+    pwr = 255;
+  }
+  setMotor(dir,pwr,PWM,IN1,IN2);
+}
 
 
 
