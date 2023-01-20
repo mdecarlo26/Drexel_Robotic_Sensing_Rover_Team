@@ -1,30 +1,27 @@
-//#include <Rover.h>
+
 #include <Arduino.h>
 
 class RoverMotor
 {
   public:
     RoverMotor(int pwm, int dir1, int dir2, int ENCA, int ENCB, float kp,float ki);
-    void setMotor(int dir, int pwmVal,double setpoint);
+    void setMotor(int dir, int pwmVal);
     void readEncoder();
-    void UpdatePI(double setpoint);
+    void UpdatePI(double setpoint)
   private:
     int pwmPin;
     int dir1Pin;
     int dir2Pin;
     int ENCAPin;
     int ENCBPin;
+    double setpoint;
     
     float kiMotor;
     float kpMotor;
-
-    long prevT = 0;
-    int posPrev = 0;
-     
+      
     volatile int pos_i=0;
     volatile float velocity_i = 0;
     volatile long prevT_i=0;
-    volatile double setpoint;
 
     float v1Filt = 0;
     float v1Prev = 0;
@@ -49,33 +46,13 @@ RoverMotor::RoverMotor(int pwm, int dir1, int dir2, int ENCA, int ENCB, float kp
   pinMode(pwmPin,OUTPUT);
   pinMode(dir1Pin,OUTPUT);
   pinMode(dir2Pin,OUTPUT);
+  pinMode(ENCAPin,INPUT);
+  pinMode(ENCBPin,INPUT);  
 
-//  attachInterrupt(digitalPinToInterrupt(ENCAPin),
-//                  readEncoder,RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCAPin),readEncoder,RISING);
   };
 
-void RoverMotor::readEncoder() {
-  // Read encoder B when ENCA rises
-  int B = digitalRead(ENCBPin);
-  int increment = 0;
-  if(B>0){
-    // If B is high, increment forward
-    increment = 1;
-    }
-  else{
-    // Otherwise, increment backward
-    increment = -1;
-  }
-  pos_i = pos_i + increment;
-
-  // Compute velocity with method 2
-  long currT = millis();
-  float deltaT = ((float) (currT - prevT_i))/1.0e3;
-  velocity_i = increment/deltaT;
-  prevT_i = currT;
-};
-
-void RoverMotor::setMotor(int dir, int pwmVal,double setpoint) {
+void RoverMotor::setMotor(int dir, int pwmVal) {
   // sets speed and direction of motor
   analogWrite(pwmPin,pwmVal);//Motor Speed
   if(dir == 1){ 
@@ -93,20 +70,38 @@ void RoverMotor::setMotor(int dir, int pwmVal,double setpoint) {
     digitalWrite(dir1Pin,LOW);
     digitalWrite(dir2Pin,LOW);    
   }
-  Serial.print("Setpoint: ");
-  Serial.print(setpoint);
-  Serial.print(" Actual Speed: ");
-  Serial.print(v1Filt);
-  Serial.println();
+};
+
+void RoverMotor::readEncoder() {
+  // Read encoder B when ENCA rises
+  int B = digitalRead(ENCBPin);
+  int increment = 0;
+  if(B>0){
+    // If B is high, increment forward
+    increment = 1;
+  }
+  else{
+    // Otherwise, increment backward
+    increment = -1;
+  }
+  pos_i = pos_i + increment;
+
+  // Compute velocity with method 2
+  long currT = millis();
+  float deltaT = ((float) (currT - prevT_i))/1.0e3;
+  velocity_i = increment/deltaT;
+  prevT_i = currT;
 };
 
 void RoverMotor::UpdatePI(double setpoint){
   int pos = 0;
-  int velocity2 = 0;
-  noInterrupts();
+  float velocity2 = 0;
+  noInterrupts(); // disable interrupts temporarily while reading
   pos = pos_i;
   velocity2 = velocity_i;
-  interrupts();
+  interrupts(); // turn interrupts back on
+
+  // Compute velocity with method 1
   long currT = micros();
   float deltaT = ((float) (currT-prevT))/1.0e6;
   float velocity1 = (pos - posPrev)/deltaT;
@@ -129,8 +124,7 @@ void RoverMotor::UpdatePI(double setpoint){
   // Compute the control signal u
   float kp = 3;
   float ki = 22;
-  float e = setpoint-v1Filt;
-//  float e = vt-v1Filt;
+  float e = vt-v1Filt;
   eintegral = eintegral + e*deltaT;
   
   float u = kp*e + ki*eintegral;
@@ -144,8 +138,9 @@ void RoverMotor::UpdatePI(double setpoint){
   if(pwr > 255){
     pwr = 255;
   }
-  setMotor(dir,pwr,setpoint);
+  setMotor(dir,pwr,PWM,IN1,IN2);
 }
+
 
 
 
@@ -158,22 +153,20 @@ void RoverMotor::UpdatePI(double setpoint){
 // RoverMotor motor4=RoverMotor(5,26,27,2,23,3,22);
 RoverMotor motor1(12,34,35,18,31,3,22);
 RoverMotor motor2(8,37,36,19,38,3,22);
-double setpoint;
+double setpoint=0;
 void setup(){
   //insert 
-  
   Serial.begin(9600);
-  Serial.println();
-  motor1.setMotor(1, 0,0);
-//  motor2.setMotor(-1,255);
+//  motor1.setMotor(1,150);
+//  motor2.setMotor(-1,150);
   
 }
 
 void loop() {
-  if(Serial.available() > 0) {
-    setpoint = Serial.readString().toDouble();
+  if (Serial.avaliable() > 0){
+    setpoint = ((double) (Serial.parseFload()));
   }
   motor1.UpdatePI(setpoint);
-//  motor1.readEncoder();
+  motor2.UpdatePI(setpoint);
 //  // Set the motor speed and direction
 }
