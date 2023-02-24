@@ -7,12 +7,16 @@ class RoverMotor
     RoverMotor(int pwm, int dir1, int dir2, int ENCA, int ENCB, float kp,float ki);
     void setMotor(int dir, int pwmVal);
     void readEncoder();
-    void UpdatePI(double setpoint)
+    void UpdatePI(double setpoint);
+    int ENCAPin;
+    volatile float velocity_i = 0;
+
+
   private:
     int pwmPin;
     int dir1Pin;
     int dir2Pin;
-    int ENCAPin;
+    
     int ENCBPin;
     double setpoint;
     
@@ -20,8 +24,11 @@ class RoverMotor
     float kpMotor;
       
     volatile int pos_i=0;
-    volatile float velocity_i = 0;
+//    volatile float velocity_i = 0;
     volatile long prevT_i=0;
+    long prevT=0;
+    int posPrev=0;
+    
 
     float v1Filt = 0;
     float v1Prev = 0;
@@ -49,7 +56,7 @@ RoverMotor::RoverMotor(int pwm, int dir1, int dir2, int ENCA, int ENCB, float kp
   pinMode(ENCAPin,INPUT);
   pinMode(ENCBPin,INPUT);  
 
-  attachInterrupt(digitalPinToInterrupt(ENCAPin),readEncoder,RISING);
+  
   };
 
 void RoverMotor::setMotor(int dir, int pwmVal) {
@@ -75,6 +82,12 @@ void RoverMotor::setMotor(int dir, int pwmVal) {
 void RoverMotor::readEncoder() {
   // Read encoder B when ENCA rises
   int B = digitalRead(ENCBPin);
+  int A = digitalRead(ENCAPin);
+  Serial.print("Encoder val (A,B): ");
+  Serial.print(A);
+  Serial.print(",");
+  Serial.print(B);
+  Serial.println();
   int increment = 0;
   if(B>0){
     // If B is high, increment forward
@@ -138,11 +151,8 @@ void RoverMotor::UpdatePI(double setpoint){
   if(pwr > 255){
     pwr = 255;
   }
-  setMotor(dir,pwr,PWM,IN1,IN2);
+  setMotor(dir,pwr);
 }
-
-
-
 
 
 
@@ -153,20 +163,43 @@ void RoverMotor::UpdatePI(double setpoint){
 // RoverMotor motor4=RoverMotor(5,26,27,2,23,3,22);
 RoverMotor motor1(12,34,35,18,31,3,22);
 RoverMotor motor2(8,37,36,19,38,3,22);
+
+void ChooseMotor1(){
+  motor1.readEncoder();
+}
+void ChooseMotor2(){
+  motor2.readEncoder();
+}
+
+//void ChooseMotor3(){
+//  motor3.readEncoder();
+//}
+//void ChooseMotor4(){
+//  motor4.readEncoder().
+//}
+
 double setpoint=0;
 void setup(){
   //insert 
   Serial.begin(9600);
 //  motor1.setMotor(1,150);
 //  motor2.setMotor(-1,150);
-  
+ // attachInterrupt(digitalPinToInterrupt(motor1.ENCAPin),ChooseMotor1,RISING);
+  attachInterrupt(digitalPinToInterrupt(motor2.ENCAPin),ChooseMotor2, RISING);
+ // attachInterrupt(digitalPinToInterrupt(motor3.ENCAPin),ChooseMotor3,RISING) ; 
+//  attachInterrupt(digitalPinToInterrupt(motor4.ENCAPin),ChooseMotor4,RISING);  
 }
-
 void loop() {
-  if (Serial.avaliable() > 0){
-    setpoint = ((double) (Serial.parseFload()));
+
+  if (Serial.available() > 0){
+    setpoint = Serial.readString().toDouble();
   }
-  motor1.UpdatePI(setpoint);
-  motor2.UpdatePI(setpoint);
+//  motor1.UpdatePI(setpoint);
+//  Serial.print("Setpoint: ");
+//  Serial.print(setpoint);
+//  Serial.print("  Speed: ");
+//  Serial.print(motor2.velocity_i);
+//  Serial.println();
+//  motor2.UpdatePI(setpoint);
 //  // Set the motor speed and direction
 }
